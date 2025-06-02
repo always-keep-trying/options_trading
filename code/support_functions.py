@@ -103,6 +103,7 @@ def get_strikes(ticker, last_date):
     OTM_strike = OTM_strike_list[len(OTM_strike_list) // 2]
     # result in a dictionary
     strike_dict = {'ITM': ITM_strike, 'ATM': ATM_strike, 'OTM': OTM_strike}
+    print(strike_dict)
     return strike_dict
 
 
@@ -120,6 +121,7 @@ def get_option_chain_strikes(ticker, last_date):
     """
 
     strike_dict = get_strikes(ticker, last_date)
+    strikes = list(strike_dict.values())
 
     call_data = pd.DataFrame()
     put_data = pd.DataFrame()
@@ -128,15 +130,22 @@ def get_option_chain_strikes(ticker, last_date):
         # CALL
         opt_calls = opt_tenor.calls
         opt_calls.loc[:, 'Expiration'] = x
-        opt_calls = opt_calls.loc[opt_calls.strike.isin(strike_dict.values), :]
+        opt_calls = opt_calls.loc[opt_calls.strike.isin(strikes), :]
         call_data = pd.concat([call_data, opt_calls], ignore_index=True)
         # PUT
         opt_puts = opt_tenor.puts
         opt_puts.loc[:, 'Expiration'] = x
-        opt_puts = opt_puts.loc[opt_puts.strike.isin(strike_dict.values), :]
+        opt_puts = opt_puts.loc[opt_puts.strike.isin(strikes), :]
         put_data = pd.concat([put_data, opt_puts], ignore_index=True)
     call_data.loc[:, 'put_call_code'] = 'C'
     put_data.loc[:, 'put_call_code'] = 'P'
+    # Add strike's corresponding moneyness as a column
+    ref_df = pd.DataFrame({'strike': list(strike_dict.values()), 'moneyness': list(strike_dict.keys())})
+    call_data = pd.merge(call_data, ref_df, how='left')
+    put_data = pd.merge(put_data, ref_df, how='left')
+    # Add Days to expiration
+    call_data.loc[:, 'dtox'] = list(map(lambda x: (pd.to_datetime(x).date() - last_date.to_pydatetime().date()).days,
+                                        call_data.loc[:, 'Expiration']))
+    put_data.loc[:, 'dtox'] = list(map(lambda x: (pd.to_datetime(x).date() - last_date.to_pydatetime().date()).days,
+                                       put_data.loc[:, 'Expiration']))
     return call_data, put_data
-
-
