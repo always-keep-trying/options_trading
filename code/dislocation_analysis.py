@@ -9,12 +9,15 @@ from fredapi import Fred
 
 import matplotlib.pyplot as plt
 
-
-fred_api = Fred(api_key=os.environ['FRED_API_KEY'])
+try:
+    fred_api = Fred(api_key=os.environ['FRED_API_KEY'])
+except Exception as e:
+    raise Exception("Please set your environment variable FRED_API_KEY. " + str(e))
 
 
 def time_series(function):
     """Decorator used to get info regarding the time series data"""
+
     def wrapper(*args, **kwargs):
         result = function(*args, **kwargs)
         # display information regarding the time series
@@ -24,7 +27,7 @@ def time_series(function):
         # during trading hours, the yahoo finance api fetches the current value and gives a false "close" value
         # we will drop today's value if it is before market close
         now_dt = datetime.datetime.now()
-        market_close = datetime.time(12 + 3, 15)  # 3:15 pm
+        market_close = datetime.time(12 + 3, 15)  # 3:15 pm CST
         if (now_dt.date() == pd.to_datetime(result.index.max()).date()) & (now_dt.time() < market_close):
             result = result.drop(result.index.max(), inplace=False)
             print(f"Removing today's value as market is still open (now: {now_dt})")
@@ -42,8 +45,15 @@ def time_series(function):
 
 
 @time_series
-def extract_hist_yf(symbol, period="max"):
-    """Extract time series from yahoo finance"""
+def extract_hist_yf(symbol: str, period: str = "max") -> pd.DataFrame:
+    """Extract time series from yahoo finance
+    Args:
+        symbol (str): Ticker name.
+        period (str): Length of time series to fetch from yahoo finance.
+
+    Returns:
+        Time series dataframe.
+    """
     ticker = yf.Ticker(symbol)
     hist = ticker.history(period)
     try:
@@ -52,13 +62,20 @@ def extract_hist_yf(symbol, period="max"):
         print(f"{Long_Name=}")
         print(f"{Symbol=}")
     except Exception as e:
-        print("Error in getting ticker information \n "+str(e))
+        print("Error in getting ticker information \n " + str(e))
     return hist
 
 
 @time_series
-def extract_hist_fred(symbol):
-    """Extract time series from FRED"""
+def extract_hist_fred(symbol: str) -> pd.DataFrame:
+    """Extract time series from FRED
+    Args:
+        symbol (str): Ticker name.
+
+    Returns:
+        Time series dataframe.
+
+    """
     fred_data = pd.DataFrame(fred_api.get_series(symbol), columns=['Close'])
     try:
         info = fred_api.get_series_info(symbol)
@@ -67,11 +84,22 @@ def extract_hist_fred(symbol):
         print(f"{Long_Name=}")
         print(f"{Symbol=}")
     except Exception as e:
-        print("Error in getting ticker information \n "+str(e))
+        print("Error in getting ticker information \n " + str(e))
     return fred_data
 
 
-def calculate_ratio(ts_numer, ts_denom):
+def calculate_ratio(ts_numer: pd.DataFrame, ts_denom: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the ratio of the 2 time series given(e.g. VXN / VIX). Computes "Rolling30" column which
+    is a 30-day rolling average of the Ratio. It also computs "Diff" column, defined as "Ratio" - "Rolling30".
+
+    Args:
+        ts_numer: Time series used as the numerator of the Ratio.
+        ts_denom: Time series used as the denomicator of the Ratio.
+
+    Returns:
+        Time series of the ratio analysis.
+    """
     # compare ratio: merge data, drop na to get same hist, calculate ratio, compute stats
     # use date as index (i.e. remove time information)
     ts_numer.index = ts_numer.index.map(lambda x: pd.to_datetime(x).date())
@@ -86,7 +114,17 @@ def calculate_ratio(ts_numer, ts_denom):
     return ts_data
 
 
-def plot_diff_hist(ts_data, quantile=0.005):
+def plot_diff_hist(ts_data: pd.DataFrame, quantile: float = 0.005) -> plt.Figure:
+    """
+    Plot a histogram of the "Diff" column generated from calculate_ratio method.
+    Calculate 2 quantiles of this histogram.
+    Args:
+        ts_data: DataFrame generated from calculate_ratio method.
+        quantile: Define which quantile of the different you would like.
+
+    Returns:
+
+    """
     # observe the dislocation using the diff
     threshold_left = np.quantile(ts_data.Diff.dropna().to_list(), quantile)
     threshold_right = np.quantile(ts_data.Diff.dropna().to_list(), 1 - quantile)
@@ -105,7 +143,20 @@ def plot_diff_hist(ts_data, quantile=0.005):
     return hist_h
 
 
-def plot_dislocation_time_series(ts_data, query, start_date=datetime.date(2018, 1, 1) ):
+def plot_dislocation_time_series(ts_data: pd.DataFrame, query: str = None,
+                                 start_date: datetime.date = datetime.date(2018, 1, 1)) \
+        -> tuple[plt.Figure, pd.DataFrame]:
+    """
+    Plot the time series of the Ratio and Rolling30. The query is the condition on which we define the dislocation.
+    If a query is defined, it will mark the observations that meets those criteria with a red x.
+    Args:
+        ts_data: DataFrame generated from calculate_ratio method.
+        query: [Optional] A query of conditions that selects when the dislocation occurs.
+        start_date: Start date of the analysis, to limit the lookback period.
+
+    Returns:
+        A figure handle from the time series plot and a DataFrame selected based on the query.
+    """
     fig_h = plt.figure(figsize=(10, 5))
     plot_data = ts_data.loc[ts_data.index >= start_date, :]
     plt.plot(plot_data.index, plot_data.Ratio, marker='o', ms=1.5, label='Ratio')
@@ -122,11 +173,24 @@ def plot_dislocation_time_series(ts_data, query, start_date=datetime.date(2018, 
     return fig_h, identifier
 
 
-def main_analysis(analysis_dictionary, query=None):
+def main_analysis(analysis_dictionary: dict, query=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Main function to calculate the Ratio, generate a histogram of "Diff", and plot a time series plot regarding the Ratio.
+
+    Args:
+        analysis_dictionary: A dictionary used to calculate the ratio. Please define the keys as the ticker and the
+        value as the time series. The first item in the dictionary will be the numerator and the second item will
+        be the denominator.
+        query: [Optional] A query of conditions that selects when the dislocation occurs.
+
+    Returns:
+        1) DataFrame selected based on the query, it will be empty if query has not been defined.
+        2) DataFrame calculated from the calculate_ratio method
+    """
     # 1st element will be the numerator and the 2nd element will be the denominator
     key_vals = list(analysis_dictionary.keys())
     ratio_definition_str = f"Ratio = {key_vals[0]}/{key_vals[1]}"
-    print(f"Performing analysis of {key_vals[0]} over {key_vals[1]}, "+ratio_definition_str)
+    print(f"Performing analysis of {key_vals[0]} over {key_vals[1]}, " + ratio_definition_str)
     ts_data = calculate_ratio(ts_numer=analysis_dictionary[key_vals[0]], ts_denom=analysis_dictionary[key_vals[1]])
     # summary stat of last 1 year
     summary_data = ts_data.loc[:, ['Ratio', 'Rolling30', 'Diff']].tail(252)
