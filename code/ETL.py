@@ -62,6 +62,8 @@ class ETL:
             if IS_VERBOSE:
                 print(f"File already exists: {self.file_name}")
             self.count = pd.read_parquet(self.file_name).shape[0]
+        elif self.today_dt.weekday() >= 5:  # check if it is a weekend
+            print("today is a weekend and the ETL will not be executed")
         else:
             self.extract()
             if not self.data.empty:
@@ -83,6 +85,7 @@ class ETL:
 
 class UnderlyingETL(ETL):
     """Child class specific to Underlying ETL using the yfinance"""
+
     def __init__(self, data_dir, ticker):
         super().__init__(data_dir, ticker)
         underlying_dir = os.path.join(self.today_dir, 'Underlying')
@@ -115,6 +118,7 @@ class UnderlyingETL(ETL):
 
 class OptionETL(ETL):
     """Child class specific to Option ETL using the yfinance"""
+
     def __init__(self, data_dir, ticker):
         super().__init__(data_dir, ticker)
         option_dir = os.path.join(self.today_dir, 'Option')
@@ -143,18 +147,8 @@ class OptionETL(ETL):
             set(read_df.columns)), "there are missing columns (from OHLC)"
 
 
-if __name__ == "__main__":
-    data_dir = os.path.join(os.environ['PYTHONPATH'], "yahoo", "data")
-
-    index_opt_dict = {
-        "^VIX": "^VIX",  # replication/examples, VIX
-        "^VXN": "^NDX",  # replication, Nasdaq-100
-        "^VXD": "^DJX",  # example 1, Dow Jones Industrial Average
-        "^OVX": "UCO",  # example 2, Crude Oil
-        "^RVX": "^RUT",  # example 3, Russell-2000
-        "^GVZ": "GLD"  # example 4 and 5, Gold
-    }
-
+def main(data_dir, index_opt_dict):
+    """ main function to run the ETL"""
     ETL_summary = pd.DataFrame()
     today_dir = None
     for index_sym, opt_sym in index_opt_dict.items():
@@ -176,6 +170,23 @@ if __name__ == "__main__":
         today_dir = today_dir or und.today_dir or opt.today_dir
     print(ETL_summary)
     ETL_summary.to_csv(
-        os.path.join(today_dir, "ET_Summary_"+os.path.basename(today_dir)+".csv"),
+        os.path.join(today_dir, "ET_Summary_" + os.path.basename(today_dir) + ".csv"),
         index=False
     )
+
+
+if __name__ == "__main__":
+    data_dir = os.path.join(os.environ['PYTHONPATH'], "yahoo", "data")
+
+    index_opt_dict = {
+        "^VIX": "^VIX",  # replication/examples, VIX
+        "^VXN": "^NDX",  # replication, Nasdaq-100
+        "^VXD": "^DJX",  # example 1, Dow Jones Industrial Average
+        "^OVX": "UCO",  # example 2, Crude Oil
+        "^RVX": "^RUT",  # example 3, Russell-2000
+        "^GVZ": "GLD"  # example 4 and 5, Gold
+    }
+    if datetime.datetime.now().date().weekday() >= 5:
+        print("skipping ETL during weekend")
+    else:
+        main()
