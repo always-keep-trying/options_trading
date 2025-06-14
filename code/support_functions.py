@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import yfinance as yf
 
 DAYS_IN_YEAR = 365
 period_dic = {
@@ -18,6 +19,7 @@ IVOL_FLOOR = np.float64(1e-4)
 
 def clean_data(function):
     """ Decorator used to clean data, only applied when the function rertuns a DataFrame"""
+
     def filter_data(data_frame):
         # remove un-wanted data
         data_frame = data_frame.loc[data_frame.openInterest != 0, :]
@@ -29,7 +31,6 @@ def clean_data(function):
                     data_frame.loc[:, 'Expiration'].map(lambda x: pd.to_datetime(x).date())
                     - data_frame.loc[:, 'lastTradeDate'].map(lambda x: x.date())
             ).map(lambda x: x.days)
-            print('decorator')
             data_frame = data_frame.loc[data_frame.dtox > 0, :]
             cols_to_sort.append('Expiration')
         data_frame = data_frame.sort_values(cols_to_sort).reset_index(drop=True)
@@ -84,7 +85,7 @@ def get_option_chain_tenor(period_str, ticker, last_date, underlying_last_close,
     Returns:
         options_selected: Selected Options data.
     """
-    # TODO: refactor using get_option_chain
+    # TODO: refactor using a general method
     exp_selected, dtox_selected = select_expiration(period_str, ticker.options, last_date)
     print(ticker.info['longName'])
     option_chain_1m = ticker.option_chain(date=exp_selected)
@@ -139,7 +140,7 @@ def get_strikes(ticker, last_date):
 
 def get_option_chain_strikes(ticker, last_date):
     """
-    For all the available tenors, fetch the data with the tenors that are ITM, ATM, and OTM.
+    For all the available strike, fetch the data with the tenors that are ITM, ATM, and OTM.
 
     Args:
         ticker (yfinance.ticker.Ticker): Ticker from yfinance
@@ -149,7 +150,7 @@ def get_option_chain_strikes(ticker, last_date):
         call_data (pd.DataFrame): DataFrame of Call data
         put_data (pd.DataFrame):  DataFrame of Put data
     """
-    # TODO: refactor using get_option_chain
+    # TODO: refactor using a general method
     strike_dict = get_strikes(ticker, last_date)
     strikes = list(strike_dict.values())
 
@@ -181,10 +182,51 @@ def get_option_chain_strikes(ticker, last_date):
     return call_data, put_data
 
 
+def get_option_one_tenor(ticker, tenor):
+    """
+    Simple method of getting one tenor of option data.
+    Args:
+        ticker (yfinance.ticker.Ticker): Ticker from yfinance
+        tenor: Expiration date (in 'YYYY-MM-DD' format) to filter for from the original data
+
+    Returns:
+        dataframe of option data for the selected symbol & tenor.
+    """
+    opt_tenor = ticker.option_chain(date=tenor)
+    # CALL
+    opt_calls = opt_tenor.calls
+    if not opt_calls.empty:
+        opt_calls.loc[:, 'put_call_code'] = 'C'
+
+    # PUT
+    opt_puts = opt_tenor.puts
+    if not opt_puts.empty:
+        opt_puts.loc[:, 'put_call_code'] = 'P'
+    tenor_data = pd.concat([opt_calls, opt_puts], ignore_index=True)
+    tenor_data.loc[:, 'Expiration'] = tenor
+    return tenor_data
+
+
+def get_option_chain_asis(ticker_string):
+    """
+    Simple method of fetching options data based on the ticker. No data wil lbe modified.
+    Args:
+        ticker_string: Ticker of the option data you are looking for
+
+    Returns:
+        dataframe of option data for all tenors
+    """
+    ticker = yf.Ticker(ticker_string)
+    df = pd.DataFrame()
+    for x in ticker.options:
+        df = pd.concat([df, get_option_one_tenor(ticker, x)], ignore_index=True)
+    return df
+
+
 @clean_data
 def get_option_chain(ticker, strikes_selected=None, tenors_selected=None):
     """
-    For all the available tenors, fetch the data with the tenors that are ITM, ATM, and OTM.
+    General method of getting option data. The decorator @clean_data will remove some unwanted data.
 
     Args:
         ticker (yfinance.ticker.Ticker): Ticker from yfinance
@@ -192,8 +234,7 @@ def get_option_chain(ticker, strikes_selected=None, tenors_selected=None):
         tenors_selected (list): [Optional] List of tenors (in 'YYYY-MM-DD' format) to filter for from the original data
 
     Returns:
-        call_data (pd.DataFrame): DataFrame of Call data
-        put_data (pd.DataFrame):  DataFrame of Put data
+        DataFrame of option data
     """
 
     all_tenors = ticker.options
@@ -203,20 +244,10 @@ def get_option_chain(ticker, strikes_selected=None, tenors_selected=None):
 
     df = pd.DataFrame()
     for x in all_tenors:
-        opt_tenor = ticker.option_chain(date=x)
-        # CALL
-        opt_calls = opt_tenor.calls
-        opt_calls.loc[:, 'put_call_code'] = 'C'
-
-        # PUT
-        opt_puts = opt_tenor.puts
-        opt_puts.loc[:, 'put_call_code'] = 'P'
-        tenor_data = pd.concat([opt_calls, opt_puts], ignore_index=True)
-        tenor_data.loc[:, 'Expiration'] = x
-        df = pd.concat([df, tenor_data], ignore_index=True)
+        df = pd.concat([df, get_option_one_tenor(ticker, x)], ignore_index=True)
 
     if strikes_selected:
         df = df.loc[df.strike.isin(strikes_selected), :]
-        print(f"Strikes selected :{strikes_selected}")
+        print(f"Strikes selected: {strikes_selected}")
 
     return df
