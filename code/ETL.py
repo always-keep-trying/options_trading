@@ -189,4 +189,4 @@ if __name__ == "__main__":
     if datetime.datetime.now().date().weekday() >= 5:
         print("skipping ETL during weekend")
     else:
-        main()
+        main(data_dir, index_opt_dict)
