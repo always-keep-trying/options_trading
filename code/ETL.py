@@ -186,6 +186,7 @@ if __name__ == "__main__":
         "^RVX": "^RUT",  # example 3, Russell-2000
         "^GVZ": "GLD"  # example 4 and 5, Gold
     }
+    
     if datetime.datetime.now().date().weekday() >= 5:
         print("skipping ETL during weekend")
     else:
