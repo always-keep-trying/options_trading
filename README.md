@@ -45,3 +45,5 @@ Python packages used
 Few notes on the setup
 - Please set your environment variable PYTHONPATH so that you can import the modules in this repo.
 - Please set your environment variable FRED_API_KEY so that you can utilize the fredapi package.
+
+Python virtual environment used in this repo can be replicated using [requirements.txt](./requirements.txt)
