@@ -26,8 +26,11 @@ However, I take this idea further by comparing other volatility indices (Volatil
 
 ## Strategies
 
-Once we use the Signals to indentify opportunities(i.e. dislocation in relationship) we can take action by constructing a trade. For example a ATM Straddle of the indices would be a great option to explor.
-**More to come on this section**
+Once we use the Signals to indentify opportunities(i.e. dislocation in relationship) we can take action by constructing a trade. For example a ATM Straddle of the indices would be a great option to explore.
+
+In order to overcome the challenge of not having access to historical options data, we will collect daily options data. To accomplish this I've written the [Extract Transform and Load(ETL)](./code/ETL.py) module which can be run daily.
+
+- **More to come on this section**
 
 
 ## Data sources
@@ -40,5 +43,5 @@ Python packages used
 ## Set up process
 
 Few notes on the setup
-- Please set your environment variable PYTHONPATH so that you can import the custom modules in this repo.
+- Please set your environment variable PYTHONPATH so that you can import the modules in this repo.
 - Please set your environment variable FRED_API_KEY so that you can utilize the fredapi package.
