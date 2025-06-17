@@ -136,6 +136,7 @@ class OptionETL(ETL):
 
     def load(self):
         self.data.to_parquet(self.file_name)
+        self.count = self.data.shape[0]
 
     def validate(self):
         # very simple validation
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         "^RVX": "^RUT",  # example 3, Russell-2000
         "^GVZ": "GLD"  # example 4 and 5, Gold
     }
-    
+
     if datetime.datetime.now().date().weekday() >= 5:
         print("skipping ETL during weekend")
     else:
