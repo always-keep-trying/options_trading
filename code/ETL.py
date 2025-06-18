@@ -1,6 +1,5 @@
 import os
 import datetime
-import pdb
 
 import pandas as pd
 import yahoo.code.support_functions as sf
@@ -24,6 +23,7 @@ IS_VERBOSE = False
 
 class ETL:
     """Parent class for Extract Transform and Load process"""
+
     def __init__(self, data_dir, ticker):
         self.data = None
         self.data_dir = data_dir
@@ -174,6 +174,30 @@ def main(data_dir, index_opt_dict):
         os.path.join(today_dir, "ET_Summary_" + os.path.basename(today_dir) + ".csv"),
         index=False
     )
+
+
+def fetch_data(ticker: str, is_option: bool = True,
+               ref_date: datetime.date = datetime.datetime.now().date()) -> pd.DataFrame:
+    """
+    Fetch existing data generated from the ETL process
+    Args:
+        ticker: String ticker used in yfinance
+        is_option: if the data is option data or not, if set to False the underlying data will be fetched
+        ref_date: the date of the data to be fetched
+
+    Returns:
+
+    """
+
+    data_path = os.path.join(os.environ['PYTHONPATH'], "yahoo", "data", ref_date.strftime('%Y-%m-%d'))
+    assert os.path.exists(data_path), f"Requested date: {ref_date} data does not exist. (Path: {data_path})"
+
+    if is_option:
+        file_path = os.path.join(data_path, 'Option', f"Option{ticker}.parquet")
+    else:
+        file_path = os.path.join(data_path, 'Underlying', f"{ticker}.parquet")
+
+    return pd.read_parquet(file_path)
 
 
 if __name__ == "__main__":
