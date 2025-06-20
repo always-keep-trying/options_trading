@@ -25,7 +25,7 @@ class Strategy:
         self.premium = None
         self.max_loss = None
         self.max_profit = None
-        self.break_even_point = None
+        self.break_even_points = None
 
     def load_options_data(self):
         raise NotImplementedError("To be implemented by child class")
@@ -41,22 +41,22 @@ class Strategy:
 
 
 class Straddle(Strategy):
-    def __init__(self, ticker, trade_date, quantity):
+    def __init__(self, ticker, trade_date, quantity, target_dtox):
         super().__init__(ticker, trade_date)
-        self.break_even_points = None
         self.strike = None
         self.quantity = quantity
         self.dtox = None
         self.expiration = None
+        self.target_dtox = target_dtox
 
     def load_options_data(self):
         self.options_df = ETL.fetch_data(ticker=self.ticker, is_option=True, ref_date=self.trade_date)
 
-    def set_dtox(self, target_dtox):
+    def set_dtox(self):
         all_dtox = self.options_df.loc[:, 'DTOX'].drop_duplicates().to_list()
         all_dtox.sort()
 
-        self.dtox = min(all_dtox, key=lambda x: abs(x - target_dtox))
+        self.dtox = min(all_dtox, key=lambda x: abs(x - self.target_dtox))
         self.expiration = self.options_df.query(f"DTOX == {self.dtox}")['Expiration'].to_list()[0]
 
     def set_ATM_strike(self, underlying_close=None):
@@ -78,9 +78,9 @@ class Straddle(Strategy):
             self.strike = min(atm_set, key=lambda x: abs(x - underlying_close))
         else:
             self.strike = min(atm_set)
+        print("ATM Strike set")
 
     def construct(self):
-        self.set_ATM_strike(underlying_close=None)
 
         opt_subset = self.options_df.query(f"DTOX == {self.dtox}")
         all_strikes_dtox = opt_subset.loc[:, 'strike'].to_list()
@@ -129,12 +129,12 @@ class Straddle(Strategy):
 
         if self.quantity > 0:
             self.max_profit = np.inf
-            self.max_loss = np.min(theo_PnL.PnL)
+            self.max_loss = -1*self.premium
         elif self.quantity < 0:
-            self.max_profit = np.max(theo_PnL.PnL)
+            self.max_profit = self.premium
             self.max_loss = -np.inf
 
-        self.break_even_points = [self.strike + self.premium, self.strike - self.premium]
+        self.break_even_points = [self.strike - self.premium, self.strike + self.premium]
 
     def plot_theo_pnl(self):
         fig_h, ax = plt.subplots(figsize=(8, 5))
@@ -142,25 +142,25 @@ class Straddle(Strategy):
         plt.plot(self.theo_PnL.strike, self.theo_PnL.PnL, marker='.', label='Theo PnL')
         y_tick_size = abs(np.subtract(*list(ax.yaxis.get_majorticklocs()[0:2])))
         x_tick_size = abs(np.subtract(*list(ax.xaxis.get_majorticklocs()[0:2])))
-        
+
         title_string = ""
         if self.quantity > 0:
             plt.scatter(self.strike, np.min(self.theo_PnL.PnL), marker='x', color='r', label='Max Loss')
             ax.annotate(f"${self.max_loss:,.1f}", xy=(self.strike, self.max_loss),
                         xytext=(self.strike - x_tick_size, self.max_loss),
                         arrowprops=dict(facecolor='red', shrink=0.0001))
-            title_string += "Long "+self.__class__.__name__
+            title_string += "Long " + self.__class__.__name__
         elif self.quantity < 0:
             plt.scatter(self.strike, self.max_profit, marker='x', color='r', label='Max Profit')
             ax.annotate(f"${self.max_profit:,.1f}", xy=(self.strike, self.max_profit),
                         xytext=(self.strike - x_tick_size, self.max_profit),
                         arrowprops=dict(facecolor='red', shrink=0.0001))
             title_string += "Short " + self.__class__.__name__
-            
+
         plt.scatter(self.break_even_points, [0, 0], marker='^', color='k', label='Break-even')
 
         ax.annotate(f"{self.break_even_points[1]:,.1f}", xy=(self.break_even_points[1], 0),
-                    xytext=(self.break_even_points[1] + x_tick_size/2, y_tick_size),
+                    xytext=(self.break_even_points[1] + x_tick_size / 2, y_tick_size),
                     arrowprops=dict(facecolor='black', shrink=0.0001))
 
         ax.yaxis.set_major_formatter('${x:1.1f}')
@@ -168,9 +168,28 @@ class Straddle(Strategy):
         plt.ylabel("PnL")
         plt.xlabel('Strike')
 
-        plt.title(title_string+f" ticker: {self.ticker}, {self.expiration}(DTOX:{self.dtox})")
+        plt.title(title_string + f" ticker: {self.ticker}, {self.expiration}(DTOX:{self.dtox})")
         plt.legend()
         plt.grid()
         plt.show()
 
-    #TODO: to add __str__ and __repr__ methods
+    def run(self):
+        self.load_options_data()
+        self.set_dtox()
+        if self.strike is None:
+            # if no strike was selected, use ATM
+            self.set_ATM_strike()
+        self.construct()
+        self.calculate_theo_pnl()
+        print(self)
+
+    def __str__(self):
+        p_string = f"Ticker: '{self.ticker}', Exp: {self.expiration}, Dtox: {self.dtox}, Premium: {self.premium: .2f} \n"
+        p_string += f"Strike: {self.strike}, Break even points: {self.break_even_points} \n"
+        p_string += f"Max Profit: {self.max_profit: .2f}, Max Loss: {self.max_loss: .2f} \n"
+        return p_string
+
+    def __repr__(self):
+        r_string = f"Straddle(ticker='{self.ticker}', trade_date='{self.trade_date}', "
+        r_string += f"quantity={self.quantity}, target_dtox={self.target_dtox})"
+        return r_string
