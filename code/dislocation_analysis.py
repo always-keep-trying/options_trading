@@ -173,7 +173,7 @@ def plot_dislocation_time_series(ts_data: pd.DataFrame, query: str = None,
     return fig_h, identifier
 
 
-def main_analysis(analysis_dictionary: dict, query=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def main_analysis(analysis_dictionary: dict, query=None, add_histogram=True) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Main function to calculate the Ratio, generate a histogram of "Diff", and plot a time series plot regarding the Ratio.
 
@@ -192,14 +192,14 @@ def main_analysis(analysis_dictionary: dict, query=None) -> tuple[pd.DataFrame, 
     ratio_definition_str = f"Ratio = {key_vals[0]}/{key_vals[1]}"
     print(f"Performing analysis of {key_vals[0]} over {key_vals[1]}, " + ratio_definition_str)
     ts_data = calculate_ratio(ts_numer=analysis_dictionary[key_vals[0]], ts_denom=analysis_dictionary[key_vals[1]])
-    # summary stat of last 1 year
-    summary_data = ts_data.loc[:, ['Ratio', 'Rolling30', 'Diff']].tail(252)
-    summary = summary_data.describe()
-    summary = summary.loc[['min', 'mean', 'max', 'std'], :]
-    print("Summary Statistics")
-    print(summary)
-
-    plot_diff_hist(ts_data, quantile=0.005)
+    if add_histogram:
+        # summary stat of last 1 year
+        summary_data = ts_data.loc[:, ['Ratio', 'Rolling30', 'Diff']].tail(252)
+        summary = summary_data.describe()
+        summary = summary.loc[['min', 'mean', 'max', 'std'], :]
+        print("Summary Statistics")
+        print(summary)
+        plot_diff_hist(ts_data, quantile=0.005)
 
     # plot the time series, the query will provide the red x markers for dislocation
     plt_h, id_df = plot_dislocation_time_series(ts_data, query)
