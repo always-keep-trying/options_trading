@@ -309,8 +309,8 @@ class Strangle(Strategy):
 
 # Notes: There are other ways to implement the option strategies. One way is to start with the definitions
 # of just call and put and use the __add__() or __sub__() magic method to construct any strategies.
-# However, since I am currently exploring straddle and Strangle this implementation works for my purpose.
-# I may revisit the re-implementation down the line
+# However, since I am currently exploring Straddle and Strangle, the current implementation works for my purpose.
+# I may revisit this and re-implementation down the line
 
 
 
