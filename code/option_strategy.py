@@ -103,8 +103,6 @@ class Straddle(Strategy):
     def __init__(self, ticker, trade_date, quantity, target_dtox):
         super().__init__(ticker, trade_date, quantity, target_dtox)
         self.strike = None
-        self.dtox = None
-        self.expiration = None
         self.load_options_data()
         self.set_dtox()
 
@@ -224,9 +222,6 @@ class Strangle(Strategy):
     def __init__(self, ticker, trade_date, quantity, target_dtox):
         super().__init__(ticker, trade_date, quantity, target_dtox)
         self.strikes = None
-        self.dtox = None
-        self.expiration = None
-        self.target_dtox = target_dtox
         self.load_options_data()
         self.set_dtox()
 
