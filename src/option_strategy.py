@@ -6,9 +6,9 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-import yahoo.code.support_functions as sf
-import yahoo.code.ETL as ETL
-from yahoo.code.ETL import bcolors
+import yahoo.src.support_functions as sf
+import yahoo.src.ETL as ETL
+from yahoo.src.ETL import bcolors
 
 r_arrow_p = dict(edgecolor='red', shrink=0.005, headwidth=4, width=1, fill=False)
 k_arrow_p = dict(edgecolor='black', shrink=0.005, headwidth=4, width=1, fill=False)
