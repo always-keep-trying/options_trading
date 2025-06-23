@@ -2,9 +2,11 @@ import os
 import datetime
 
 import pandas as pd
-import yahoo.code.support_functions as sf
-import yahoo.code.dislocation_analysis as da
-import yahoo.code.ORATS_data as od
+import math
+
+import yahoo.src.support_functions as sf
+import yahoo.src.dislocation_analysis as da
+import yahoo.src.ORATS_data as od
 
 class bcolors:
     HEADER = '\033[95m'
@@ -35,8 +37,8 @@ class ETL:
         self.today_dir = None
         if IS_VERBOSE:
             print(f"Today's date is {self.today_dt.strftime('%Y-%m-%d')}")
-        self.create_dir()
         self.file_name = None
+        self.create_dir()
 
     def create_dir(self):
         assert os.path.exists(self.data_dir), "Data directory does not exist!"
@@ -62,9 +64,10 @@ class ETL:
             if IS_VERBOSE:
                 print(f"File already exists: {self.file_name}")
             self.count = pd.read_parquet(self.file_name).shape[0]
-        elif isinstance(self.ticker, list):
-            [os.path.exists(self.file_name(x)) for x in self.ticker]
-
+        elif isinstance(self.ticker, list) and all([os.path.exists(self.file_name(x)) for x in self.ticker]):
+            self.count = 0
+            for symbol in self.ticker:
+                self.count += pd.read_parquet(self.file_name(symbol)).shape[0]
         elif self.today_dt.weekday() >= 5:  # check if it is a weekend
             print("today is a weekend and the ETL will not be executed")
         else:
@@ -124,9 +127,9 @@ class UnderlyingETL(ETL):
         assert df_size[0] > 0, "The file is empty!"
 
         assert {'Open', 'High', 'Low', 'Close'}.issubset(set(read_df.columns)), "there are missing columns (from OHLC)"
-        import pdb
-        pdb.set_trace()
-        # TODO: fix zero close value, read_df.iloc[-1,['Open', 'High', 'Low', 'Close']].to_list()
+
+        value_closest = min(read_df.iloc[-1, :][['Open', 'High', 'Low', 'Close']].to_list(), key=lambda x: abs(x - 0))
+        assert not math.isclose(value_closest,0), "There is a zero value in the OHLC data!"
 
 
 class OptionETL(ETL):
@@ -169,7 +172,6 @@ class ORATS_Options(ETL):
         self.today_dir = None
 
     def create_dir(self):
-
         option_dir = os.path.join(self.data_dir, self.trade_date, 'Option')
         if not os.path.exists(option_dir):
             os.makedirs(option_dir)
