@@ -86,4 +86,32 @@ def get_his_strikes_OPRA(ticker: str, exp_date: str, strike: int | str, trade_da
     return get_request("hist/strikes/options", querystring)
 
 
+def format_ORATS_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Format dataframe fetched from ORATS API. Each contract originally have both call and put in a single row,
+    this function splits those into 2 rows (one for call one for put).
+    Args:
+        df: Data fetched frome ORATS API
+
+    Returns:
+        formatted datafrmae
+    """
+    opt_contract_cols = ['ticker', 'tradeDate', 'expirDate', 'dte', 'strike', 'stockPrice']
+    contract_specific_columns = ['BidPrice', 'Value', 'AskPrice', 'BidIv', 'MidIv', 'AskIv']
+    greeks_cols = ['delta', 'gamma', 'theta', 'vega', 'rho', 'phi']
+    other_cols = ['smvVol', 'residualRate']
+
+    new_df = pd.DataFrame()
+
+    for pc_type in ['call', 'put']:
+        col_rename = {}
+        for x in contract_specific_columns:
+            col_rename[pc_type + x] = x
+        curr_df = df.loc[:, opt_contract_cols + list(map(lambda x: pc_type + x, contract_specific_columns)) +
+                            greeks_cols + other_cols].rename(columns=col_rename).copy()
+        curr_df.loc[:, 'put_call_code'] = pc_type[0].upper()
+        curr_df = curr_df.loc[:, list(curr_df.columns[0:6]) + ['put_call_code'] + list(curr_df.columns[6:-1])]
+        new_df = pd.concat([new_df, curr_df], ignore_index=True)
+
+    return new_df.sort_values(['dte', 'strike']).reset_index(drop=True)
 

@@ -186,7 +186,9 @@ class ORATS_Options(ETL):
         all_tickers = self.data['ticker'].drop_duplicates().to_list()
         data_dict = {}
         for symb in all_tickers:
-            data_dict[symb] = self.data.loc[self.data['ticker'] == symb, :].reset_index(drop=False).copy()
+            data_dict[symb] = od.format_ORATS_data(
+                df = self.data.loc[self.data['ticker'] == symb, :].reset_index(drop=False).copy()
+            )
         # convert the pd.DataFrame to dict
         self.data = data_dict
 
@@ -256,7 +258,7 @@ def main_ORATS_hist(data_dir: str, tickers: list, ref_date: str):
 
 
 def fetch_data(ticker: str, is_option: bool = True,
-               ref_date: datetime.date = datetime.datetime.now().date()) -> pd.DataFrame:
+               ref_date: str | datetime.date = datetime.datetime.now().date()) -> pd.DataFrame:
     """
     Fetch existing data generated from the ETL process
     Args:
@@ -267,6 +269,8 @@ def fetch_data(ticker: str, is_option: bool = True,
     Returns:
 
     """
+    if isinstance(ref_date,str):
+        ref_date = pd.to_datetime(ref_date, format="%Y-%m-%d").date()
 
     data_path = os.path.join(os.environ['PYTHONPATH'], "yahoo", "data", ref_date.strftime('%Y-%m-%d'))
     assert os.path.exists(data_path), f"Requested date: {ref_date} data does not exist. (Path: {data_path})"
@@ -283,7 +287,7 @@ if __name__ == "__main__":
     data_dir = os.path.join(os.environ['PYTHONPATH'], "yahoo", "data")
 
     index_opt_dict = {
-        "^VIX": "^VIX",  # replication/examples, VIX
+        "^VIX": "^SPX",  # replication/examples, VIX
         "^VXN": "^NDX",  # replication, Nasdaq-100
         "^VXD": "^DJX",  # example 1, Dow Jones Industrial Average
         "^OVX": ["UCO", "BNO"],  # example 2, Crude Oil
@@ -296,4 +300,4 @@ if __name__ == "__main__":
     else:
         main(data_dir, index_opt_dict)
 
-    main_ORATS_hist(data_dir=data_dir, tickers=["SPX", "BNO", "UCO"], ref_date='2020-04-21')
+    main_ORATS_hist(data_dir=data_dir, tickers=["SPX", "BNO", "UCO", "DJX"], ref_date='2020-04-21')
