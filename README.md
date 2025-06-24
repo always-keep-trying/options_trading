@@ -9,16 +9,15 @@ The aim of this repo is to generate signals for trading, construct strategies us
 Time series data of index and options data can be fetched from the [yfinance](https://ranaroussi.github.io/yfinance/index.html) python package.
 To simplify the process of fetching these data, the [support functions module](./src/support_functions.py) and a separate [module for visualizing](./src/plot_functions.py) were created.
 
-As an example I've fetched data related to "SPX" Index and their options in the [option data visualization notebook](./src/option_data_visualiztion.ipynb). The Implied volatility Skew/Smile has been plotted in the notebook.
+As an example I've fetched data related to "SPX" Index and their options in the [option data visualization notebook](./src/option_data_visualiztion.ipynb). The Implied volatility Smile has been plotted in the notebook.
 
-Few challenge that came up during exploration of the data source were...
-- The options data is the current day's data only. It does not give access to historical data. 
-- No greeks available (Delta, Vega, Rho, Gamma, and Theta).
-- Data quality issues. For example some implied volatility values seems to be set to a near zero value. In order to remove such observations the @clean_data decorator will be used to remove such observations. (see [support_functions.py](./src/support_functions.py)). 
+Since the yfiancne does not have historical data nor greeks, an alternative data source was needed. 
+[ORATS](https://orats.com/) was a good source of options historical data throught their "Delayed Data API"(see [ORATS_data.py](./src/ORATS_data.py)).
+
 
 ## Signals
 
-The signals focused on this repository would be on relationship between volatility indices. Full disclosure here, this idea was introduced to me by Euan Sinclair from a webinar hosted by CBOE: "Finding Edge: A Key Part of Trading Process". During this webinar the relationship that was explored was between VXN(Cboe NASDAQ-100 Volatility Index) to VIX(30 day volatility of SPX). 
+The signals focused on this repository would be on relationship between volatility indices. Full disclosure here, this idea was introduced to me by Euan Sinclair from a webinar hosted by CBOE: "Finding Edge: A Key Part of Trading Process". During this webinar the relationship that was explored was between VXN(Cboe NASDAQ-100 Volatility Index) to VIX(30 day Implied Volatility of SPX). 
 
 However, expanding on this idea this repository takes it further by comparing other volatility indices (Volatility index of NDX, DJX, RUT, Gold, and Oil). To explore these relationships and dislocations is the [dislocation analysis](./src/dislocation_analysis.py) module was created.  
 **The results of these analysis and dislocations can be seen in [this notebook](./src/notebooks/Finding_an_Edge.ipynb).**
