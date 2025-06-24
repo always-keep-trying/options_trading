@@ -40,11 +40,15 @@ Python packages used
 - [yfinance](https://ranaroussi.github.io/yfinance/index.html): An open-source tool that uses Yahoo's publicly available APIs to fetch data.
 - [fredapi](https://pypi.org/project/fredapi/): Fetches data from FRED, a trusted data source provided by the Federal Reserve Bank of St.Louis. An API key is needed to use this module, please visit [website](https://fred.stlouisfed.org/) to get one.
 
+[ORATS Delayed Data API](https://orats.com/docs/historical-data-api) is a paid service that provices options historical data.
+
 
 ## Set up 
 
 Few notes on the setup
 - Please set your environment variable PYTHONPATH so that you can import the modules in this repo.
 - Please set your environment variable FRED_API_KEY so that you can utilize the fredapi package.
+- Please set your environment variable ORATS_API_KEY so that you can fetch data through their API(paid service).
+
 
 Python virtual environment used in this repo can be replicated using [requirements.txt](./requirements.txt)
