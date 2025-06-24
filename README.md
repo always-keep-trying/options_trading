@@ -21,7 +21,7 @@ Few challenge that came up during exploration of the data source were...
 The signals focused on this repository would be on relationship between volatility indices. Full disclosure here, this idea was introduced to me by Euan Sinclair from a webinar hosted by CBOE: "Finding Edge: A Key Part of Trading Process". During this webinar the relationship that was explored was between VXN(Cboe NASDAQ-100 Volatility Index) to VIX(30 day volatility of SPX). 
 
 However, expanding on this idea this repository takes it further by comparing other volatility indices (Volatility index of NDX, DJX, RUT, Gold, and Oil). To explore these relationships and dislocations is the [dislocation analysis](./src/dislocation_analysis.py) module was created.  
-**The results of these analysis and dislocations can be seen in [this notebook](./src/Finding_an_Edge.ipynb).**
+**The results of these analysis and dislocations can be seen in [this notebook](./src/notebooks/Finding_an_Edge.ipynb).**
 
 *A new data source FRED has been added in this step. Some indices were not available in yfinance, but they were available in the [fredapi](https://pypi.org/project/fredapi/).*
 

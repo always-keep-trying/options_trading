@@ -3,6 +3,8 @@
 data
 src/etl_shell
 src/notes.txt
+src/notebooks_build
+backtest
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
