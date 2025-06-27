@@ -59,6 +59,9 @@ class ETL:
     def validate(self):
         raise NotImplementedError("To be implemented by child class")
 
+    def revert_load(self):
+        raise NotImplementedError("To be implemented by child class")
+
     def run(self):
         if isinstance(self.ticker, str) and os.path.exists(self.file_name):
             if IS_VERBOSE:
@@ -73,10 +76,13 @@ class ETL:
         else:
             self.extract()
             if not self.data.empty:
+                #try:
                 self.transform()
                 self.load()
                 self.validate()
                 print(f"{self.__class__.__name__} complete for {self.ticker}")
+                # except:
+                #     self.revert_load()
             else:
                 print(f"{bcolors.WARNING}Warning: "
                       f"No data was extracted {self.ticker} during use of "
@@ -85,7 +91,8 @@ class ETL:
 
     def __str__(self):
         p_str = f"{self.__class__.__name__} for ticker:{self.ticker} \n"
-        p_str += f"File: {self.file_name}\n"
+        if isinstance(self.file_name, str):
+            p_str += f"File: {self.file_name}\n"
         p_str += f"Count: {self.count}"
         return p_str
 
@@ -181,14 +188,45 @@ class ORATS_Options(ETL):
     def extract(self):
         self.data = od.get_hist_strikes(tickers=self.ticker, trade_date=self.trade_date)
 
+    @staticmethod
+    def check_any_duplicate_data(data_frame: pd.DataFrame) -> bool:
+        """
+        Checkes for duplciate contract data. Returns True if there is a duplciate data and
+        retuns False when there is no duplicates data
+        Args:
+            data_frame: Dataframe of option contracts for a given date.
+        Returns:
+            boolean
+        """
+        count_df = data_frame.groupby(
+            ['ticker', 'tradeDate', 'expirDate', 'dte', 'strike', 'put_call_code']
+        )['stockPrice'].count().reset_index(drop=False).rename(columns={'stockPrice': 'Count'})
+        drop_df = count_df.query('Count > 1')
+        is_duplicate_data = not(drop_df.empty)
+        return is_duplicate_data
+
+    @staticmethod
+    def clean_up_duplocate_data(data_frame: pd.DataFrame) -> pd.DataFrame:
+        ind_df = data_frame.loc[:, ['ticker', 'tradeDate', 'expirDate', 'dte', 'strike', 'put_call_code']].drop_duplicates()
+        data_frame = data_frame.loc[ind_df.index, :].reset_index(drop=True)
+        return data_frame
+
     def transform(self):
         # subset data by ticker
         all_tickers = self.data['ticker'].drop_duplicates().to_list()
         data_dict = {}
         for symb in all_tickers:
-            data_dict[symb] = od.format_ORATS_data(
+
+            df = od.format_ORATS_data(
                 df = self.data.loc[self.data['ticker'] == symb, :].reset_index(drop=False).copy()
             )
+            duplicate_data = self.check_any_duplicate_data(df)
+            if duplicate_data:
+                df = self.clean_up_duplocate_data(df)
+                duplicate_data_2nd = self.check_any_duplicate_data(df)
+                assert not(duplicate_data_2nd), 'There should be no longer duplciat data'
+
+            data_dict[symb] = df
         # convert the pd.DataFrame to dict
         self.data = data_dict
 
@@ -210,6 +248,45 @@ class ORATS_Options(ETL):
 
             assert {'delta', 'gamma', 'theta', 'vega', 'rho'}.issubset(
                 set(read_df.columns)), "Greeks are missing!"
+
+            count_df = read_df.groupby(
+                ['ticker','tradeDate','expirDate','dte','strike','put_call_code']
+            )['stockPrice'].count().reset_index(drop=False)
+
+            assert count_df['stockPrice'].max() == 1, 'Duplicate data exists!'
+
+    def revert_load(self):
+        """
+        Method used to delete the data when validation fails
+        """
+        for key, _ in self.data.items():
+            file_dir = self.file_name(key)
+            if os.path.exists(file_dir):
+                os.remove(file_dir)
+                print(f"File removed: {file_dir}")
+
+
+    def clean_up(self):
+        """
+        Clean up data by removing duplciate contract data stemming from ORATs datasource.
+        """
+        for sym in self.ticker:
+            curr_file = self.file_name(sym)
+            if os.path.exists(curr_file):
+                df = pd.read_parquet(curr_file)
+                if self.check_any_duplicate_data(df):
+                    df = self.clean_up_duplocate_data(df)
+                    os.remove(curr_file)
+                    df.to_parquet(curr_file)
+                    print(f"Dropped duplcaite contract data.\n New file: {curr_file}")
+
+
+    def __str__(self):
+        p_str = super().__str__()
+        p_str += "\nFiles: " + "\n ".join([self.file_name(x) for x in self.ticker])
+        return p_str
+
+
 
 
 def main(data_dir: str, index_opt_dict: dict):

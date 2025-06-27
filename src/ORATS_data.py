@@ -113,5 +113,10 @@ def format_ORATS_data(df: pd.DataFrame) -> pd.DataFrame:
         curr_df = curr_df.loc[:, list(curr_df.columns[0:6]) + ['put_call_code'] + list(curr_df.columns[6:-1])]
         new_df = pd.concat([new_df, curr_df], ignore_index=True)
 
+    type_dict = {}
+    for col in contract_specific_columns+greeks_cols+other_cols:
+        type_dict[col] = 'float64'
+    new_df = new_df.astype(type_dict)
+
     return new_df.sort_values(['dte', 'strike']).reset_index(drop=True)
 
