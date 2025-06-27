@@ -2,6 +2,7 @@
 
 data
 src/etl_shell
+src/jupyter_lab
 src/notes.txt
 src/notebooks_build
 backtest
