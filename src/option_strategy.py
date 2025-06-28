@@ -53,6 +53,7 @@ class Strategy:
 
     def convert_format(self):
         """ Convert the data fetched from 'yfinance' to match the format of 'ORATS' data """
+        
         self.options_df = self.options_df.rename(
             columns={'DTOX':'dte','lastPrice':'Value','impliedVolatility':'smvVol',
                      'Expiration':'expirDate'}
