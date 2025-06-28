@@ -38,25 +38,47 @@ class Strategy:
         self.max_profit = None
         self.break_even_points = None
 
+        self.data_source = None
+
     def load_options_data(self):
         self.options_df = ETL.fetch_data(ticker=self.ticker, is_option=True, ref_date=self.trade_date)
 
-    def set_dtox(self):
-        all_dtox = self.options_df.loc[:, 'DTOX'].drop_duplicates().to_list()
-        all_dtox.sort()
+        if "dte" in self.options_df.columns:
+            self.data_source = "ORATS"
+        elif "DTOX" in self.options_df.columns:
+            self.data_source = "yfinance"
+            self.convert_format()
+        else:
+            raise NotImplementedError("This class is only implimented to fit ORATS data")
 
+    def convert_format(self):
+        """ Convert the data fetched from 'yfinance' to match the format of 'ORATS' data """
+        self.options_df = self.options_df.rename(
+            columns={'DTOX':'dte','lastPrice':'Value','impliedVolatility':'smvVol',
+                     'Expiration':'expirDate'}
+        )
+        self.options_df.loc[:,'ticker'] = self.ticker
+        self.option_df.loc[:,'tradeDate'] = self.trade_date
+        # Note: yfinance data would need stockPrice column
+
+
+    def set_dtox(self):
+        all_dtox = self.options_df.loc[:, 'dte'].drop_duplicates().to_list()
+        all_dtox.sort()
         self.dtox = min(all_dtox, key=lambda x: abs(x - self.target_dtox))
-        self.expiration = self.options_df.query(f"DTOX == {self.dtox}")['Expiration'].to_list()[0]
+        self.expiration = self.options_df.query(f"dte == {self.dtox}")['expirDate'].to_list()[0]
+
 
     def select_positions(self):
         raise NotImplementedError("To be implemented by child class")
 
     def calculate_theo_pnl(self):
-        opt_subset = self.options_df.query(f"DTOX == {self.dtox}")
-        all_strikes_dtox = opt_subset.loc[:, 'strike'].to_list()
+        opt_subset = self.options_df.query(f"dte == {self.dtox}")
+
+        all_strikes_dtox = opt_subset.loc[:, 'strike'].drop_duplicates().to_list()
+        all_strikes_dtox.sort()
         # theo PnL
         theo_PnL = pd.DataFrame({'strike': all_strikes_dtox, 'PnL': None})
-
         pnl_list = np.zeros(len(all_strikes_dtox))
         for index, row in self.positions.iterrows():
             strike = row['strike']
@@ -81,14 +103,23 @@ class Strategy:
             title_string += "(Long) "
         elif self.quantity < 0:
             title_string += "(Short) "
-        plt.title(title_string + self.__class__.__name__
-                  + f", ticker: '{self.ticker}', {self.expiration}(DTOX:{self.dtox})")
+
+        title_string += self.__class__.__name__ + \
+                        f", ticker: '{self.ticker}', {self.expiration}(DTOX:{self.dtox})"
+
+        if hasattr(self,'strike') and not(hasattr(self,'strikes')):
+            title_string += f" Strike:{self.strike}"
+        elif hasattr(self,'strikes') and not(hasattr(self,'strike')):
+            title_string += f" Strikes:{self.strikes}"
+
+        plt.title(title_string)
         plt.ylabel("PnL")
         plt.xlabel('Strike')
         return fig_h, ax
 
     def __str__(self):
-        p_string = f"Ticker: '{self.ticker}', Exp: {self.expiration}, Dtox: {self.dtox}, Premium: {self.premium: .2f} \n"
+        p_string = f"Data Source:{self.data_source}, Trade Date: {self.trade_date.date()}, Quantity:{self.quantity} \n"
+        p_string += f"Ticker: '{self.ticker}', Exp: {self.expiration}, Dtox: {self.dtox}, Premium: {self.premium: .2f} \n"
         p_string += f"Break even points: {self.break_even_points} \n"
         p_string += f"Max Profit: {self.max_profit: .2f}, Max Loss: {self.max_loss: .2f} \n"
         return p_string
@@ -108,7 +139,7 @@ class Straddle(Strategy):
 
     def set_strike(self, strike):
         # we are assuming that the dtox is already set
-        all_strikes = self.options_df.query(f"DTOX == {self.dtox}")['strike'].drop_duplicates().to_list()
+        all_strikes = self.options_df.query(f"dte == {self.dtox}")['strike'].drop_duplicates().to_list()
         all_strikes.sort()
         if strike in all_strikes:
             self.strike = strike
@@ -119,53 +150,39 @@ class Straddle(Strategy):
                   f"updating it to {self.strike}{bcolors.ENDC}\n")
 
     def set_ATM_strike(self, underlying_close=None):
-        atm_set = set()
-
-        all_dtox = self.options_df.loc[:, 'DTOX'].drop_duplicates().to_list()
-        all_dtox.sort()
-        # use the first 2 tenors to find the ATM strike
-        for selected_dtox in all_dtox[0:2]:
-            # iterate through both call and put
-            for pc_type in ['C', 'P']:
-                contract = self.options_df.query(f"DTOX == {str(selected_dtox)} and put_call_code == '{pc_type}'",
-                                                 inplace=False).sort_values('strike')
-                ind = contract.loc[:, 'inTheMoney'].diff(1).to_list().index(True)
-                atm_set.add(contract.iloc[ind, :]['strike'])
-                atm_set.add(contract.iloc[ind - 1, :]['strike'])
-
-        if underlying_close:
-            self.strike = min(atm_set, key=lambda x: abs(x - underlying_close))
-        else:
-            self.strike = min(atm_set)
-        print(f"ATM Strike of {self.strike} selected \n")
+        contracts = self.options_df.query(f"dte == {self.dtox}")
+        ind = np.argmin(np.abs(contracts['strike'].to_numpy()-contracts['stockPrice'].to_numpy()))
+        self.strike = contracts.iloc[ind, :]['strike']
 
     def select_positions(self):
-
-        opt_subset = self.options_df.query(f"DTOX == {self.dtox}")
-        all_strikes_dtox = opt_subset.loc[:, 'strike'].to_list()
-        all_strikes_dtox.sort()
-        strike_counts = opt_subset.groupby('strike').count()['put_call_code'].reset_index(drop=False).query(
-            ' put_call_code == 2 ')
-        strike_counts_list = strike_counts.strike.to_list()
-
-        if self.strike in strike_counts_list:
+        try:
+            opt_subset = self.options_df.query(f"dte == {self.dtox}")
             opt_subset = opt_subset.query(f"strike == {self.strike}")
-        else:
-            # atm strike selection is modified
+        except Exception as e:
+            opt_subset = self.options_df.query(f"dte == {self.dtox}")
+            strike_counts_list = opt_subset.strike.to_list()
             new_ATM_Strike = min(strike_counts_list, key=lambda x: abs(x - self.strike))
-            print(
-                f"Original ATM strike was {self.strike}, due to lack of listed contracts the new ATM strike is {new_ATM_Strike}")
-            opt_subset = opt_subset.query(f"strike == {new_ATM_Strike}")
+            print(f"Original ATM strike was {self.strike}, due to lack of listed "
+                  f"contracts the new ATM strike is {new_ATM_Strike}")
             self.strike = new_ATM_Strike
-
-        opt_subset = opt_subset.drop(
-            columns=['lastTradeDate', 'change', 'percentChange', 'contractSize', 'currency']).reset_index(drop=True)
+            opt_subset = opt_subset.query(f"strike == {self.strike}")
+        finally:
+            assert opt_subset.shape[0] == 2, 'Need 2 contracts to make a straddle. ' \
+                                             'num of contracts selected:'+str(opt_subset.shape[0])
 
         opt_subset.loc[opt_subset.put_call_code == 'C', 'Netquantity'] = self.quantity
         opt_subset.loc[opt_subset.put_call_code == 'P', 'Netquantity'] = self.quantity
-        self.positions = opt_subset
         # sign of premium is same as net quantity
-        self.premium = np.float64(sum(opt_subset.Netquantity * opt_subset.lastPrice))
+        self.premium = 0
+        for _, value in opt_subset.iterrows():
+            if value['Netquantity'] > 0:
+                self.premium += value['Netquantity']*value['AskPrice']
+            elif value['Netquantity'] < 0:
+                self.premium += value['Netquantity'] * value['BidPrice']
+
+        self.positions = opt_subset.reset_index(drop=True)
+        assert self.positions.shape[0] == 2, "Straddle has 2 positions"
+
 
     def calculate_theo_pnl(self):
         super().calculate_theo_pnl()
@@ -180,7 +197,7 @@ class Straddle(Strategy):
         self.break_even_points = [self.strike - self.premium / abs(self.quantity),
                                   self.strike + self.premium / abs(self.quantity)]
 
-    def plot_theo_pnl(self):
+    def plot_theo_pnl(self,show = True):
         fig_h, ax = super().plot_theo_pnl()
 
         y_tick_size = abs(np.subtract(*list(ax.yaxis.get_majorticklocs()[0:2])))
@@ -189,22 +206,31 @@ class Straddle(Strategy):
         title_string = f"{self.quantity} "
         if self.quantity > 0:
             plt.scatter(self.strike, self.max_loss, marker='x', color='r', label='Max Loss')
-            ax.annotate(f"${self.max_loss:,.1f}", xy=(self.strike, self.max_loss),
-                        xytext=(self.strike - x_tick_size, self.max_loss),
+            ax.annotate(f"${self.max_loss:,.1f}",
+                        xy=(self.strike, self.max_loss),
+                        xytext=(self.strike - x_tick_size/2, self.max_loss),
                         arrowprops=r_arrow_p)
 
         elif self.quantity < 0:
             plt.scatter(self.strike, self.max_profit, marker='x', color='r', label='Max Profit')
-            ax.annotate(f"${self.max_profit:,.1f}", xy=(self.strike, self.max_profit),
-                        xytext=(self.strike - x_tick_size, self.max_profit),
+            ax.annotate(f"${self.max_profit:,.1f}",
+                        xy=(self.strike, self.max_profit),
+                        xytext=(self.strike - x_tick_size/2, self.max_profit),
                         arrowprops=r_arrow_p)
-        ax.annotate(f"{self.break_even_points[1]:,.1f}", xy=(self.break_even_points[1], 0),
-                    xytext=(self.break_even_points[1], np.sign(self.quantity) * y_tick_size),
-                    arrowprops=k_arrow_p)
+        # Annotate break even points
+        for be_point in self.break_even_points:
+            ax.annotate(f"{be_point:,.1f}",
+                        xy=(be_point, 0),
+                        xytext=(be_point, np.sign(self.quantity) * y_tick_size),
+                        arrowprops=k_arrow_p, horizontalalignment='center')
 
         plt.legend()
         plt.grid()
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            plt.close()
+        return fig_h, ax
 
     def build(self):
         if self.strike is None:
@@ -227,7 +253,7 @@ class Strangle(Strategy):
 
     def set_strikes(self, strikes):
         # we are assuming that the dtox is already set
-        all_strikes = self.options_df.query(f"DTOX == {self.dtox}")['strike'].drop_duplicates().to_list()
+        all_strikes = self.options_df.query(f"dte == {self.dtox}")['strike'].drop_duplicates().to_list()
         all_strikes.sort()
         if set(strikes).issubset(set(all_strikes)):
             self.strikes = strikes
@@ -238,35 +264,37 @@ class Strangle(Strategy):
                   f"updating it to {self.strikes}{bcolors.ENDC}\n")
 
     def select_positions(self):
-        opt_subset = self.options_df.query(f"DTOX == {self.dtox}")
-        all_strikes_dtox = opt_subset.loc[:, 'strike'].to_list()
-        all_strikes_dtox.sort()
+        opt_subset = self.options_df.query(f"dte == {self.dtox}")
 
-        call_posn = opt_subset.query(f"put_call_code == 'C' and strike == {max(self.strikes)}")
-        put_posn = opt_subset.query(f"put_call_code == 'P' and strike == {min(self.strikes)}")
+        assert set(self.strikes).issubset(set(opt_subset['strike'].to_list())), "Strike selected are not avaiable!"
+        opt_subset = opt_subset.loc[opt_subset['strike'].isin(self.strikes)]
 
-        opt_subset = pd.concat([call_posn, put_posn], ignore_index=True)
-        opt_subset = opt_subset.drop(
-            columns=['lastTradeDate', 'change', 'percentChange', 'contractSize', 'currency']).reset_index(drop=True)
+        # upper strike is the call, shorter strike is the put
+        opt_subset = pd.concat(
+            [opt_subset.query(f"put_call_code == 'P' and strike == {min(self.strikes)}"),
+             opt_subset.query(f"put_call_code == 'C' and strike == {max(self.strikes)}")],
+            ignore_index=True)
+
         opt_subset.loc[:, 'Netquantity'] = self.quantity
         self.positions = opt_subset
         # sign of premium is same as net quantity
-        self.premium = np.float64(sum(opt_subset.Netquantity * opt_subset.lastPrice))
+        self.premium = np.float64(sum(opt_subset.Netquantity * opt_subset.Value))
+        assert self.positions.shape[0] == 2, "Strangle has 2 positions"
 
     def calculate_theo_pnl(self):
         super().calculate_theo_pnl()
 
         if self.quantity > 0:
             self.max_profit = np.inf
-            self.max_loss = -1 * self.premium
+            self.max_loss = (-1 * self.premium)
         elif self.quantity < 0:
-            self.max_profit = -1 * self.premium
+            self.max_profit = (-1 * self.premium)
             self.max_loss = -np.inf
 
-        self.break_even_points = [min(self.strikes) - abs(self.premium / self.quantity),
+        self.break_even_points = [min(self.strikes) - abs(self.premium/self.quantity),
                                   max(self.strikes) + abs(self.premium / self.quantity)]
 
-    def plot_theo_pnl(self):
+    def plot_theo_pnl(self, show=True):
         fig_h, ax = super().plot_theo_pnl()
 
         y_tick_size = abs(np.subtract(*list(ax.yaxis.get_majorticklocs()[0:2])))
@@ -275,22 +303,30 @@ class Strangle(Strategy):
         if self.quantity > 0:
             x_point = np.min(self.strikes)
             plt.scatter(x_point, self.max_loss, marker='x', color='r', label='Max Loss')
-            ax.annotate(f"${self.max_loss:,.1f}", xy=(x_point, self.max_loss),
-                        xytext=(x_point - x_tick_size, self.max_loss),
+            ax.annotate(f"${self.max_loss:,.1f}",
+                        xy=(x_point, self.max_loss),
+                        xytext=(x_point - x_tick_size/2, self.max_loss),
                         arrowprops=r_arrow_p)
         elif self.quantity < 0:
             x_point = np.min(self.strikes)
             plt.scatter(x_point, self.max_profit, marker='x', color='r', label='Max Profit')
-            ax.annotate(f"${self.max_profit:,.1f}", xy=(x_point, self.max_profit),
-                        xytext=(x_point + x_tick_size, self.max_profit),
+            ax.annotate(f"${self.max_profit:,.1f}",
+                        xy=(x_point, self.max_profit),
+                        xytext=(x_point + x_tick_size/2, self.max_profit),
                         arrowprops=r_arrow_p)
 
-        ax.annotate(f"{self.break_even_points[1]:,.1f}", xy=(self.break_even_points[1], 0),
-                    xytext=(self.break_even_points[1], np.sign(self.quantity) * y_tick_size),
-                    arrowprops=k_arrow_p)
+        for be_point in self.break_even_points:
+            ax.annotate(f"{be_point:,.1f}",
+                        xy=(be_point, 0),
+                        xytext=(be_point, np.sign(self.quantity) * y_tick_size),
+                        arrowprops=k_arrow_p, horizontalalignment='center')
         plt.legend()
         plt.grid()
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            plt.close()
+        return fig_h, ax
 
     def build(self):
         assert self.strikes is not None, "Please use set_strikes() to set strikes"
