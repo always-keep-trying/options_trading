@@ -1,6 +1,7 @@
 .idea
 
-data
+data/*
+!data/*.csv
 src/etl_shell
 src/jupyter_lab
 src/notes.txt
